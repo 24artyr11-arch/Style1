@@ -96,6 +96,23 @@ class Tests(unittest.TestCase):
         self.app.callback(10, f'q:{nonce}:0:0')
         with self.assertRaises(UserError): self.app.callback(10, f'q:{nonce}:0:0')
 
+    def test_one_or_two_outfits_are_accepted(self):
+        ids = self.seed()
+        inventory = self.s.items(10)
+        one = {'outfits': [{'ids': [ids[0], ids[3], ids[4]]}]}
+        two = {'outfits': [
+            {'ids': [ids[0], ids[3], ids[4]]},
+            {'ids': [ids[1], ids[3], ids[4]]},
+        ]}
+        self.assertEqual(len(validate_outfits(one, inventory)), 1)
+        self.assertEqual(len(validate_outfits(two, inventory)), 2)
+
+    def test_dress_and_shoes_can_start_wizard(self):
+        self.s.add(10, 'dress', 'Платье / комбинезон', 'Платье', photo())
+        self.s.add(10, 'shoes', 'Обувь', 'Обувь', photo())
+        self.app.callback(10, 'looks')
+        self.assertEqual(self.s.state(10)['step'], 0)
+
     def test_delete_and_erase(self):
         ids = self.seed()
         oid = self.s.save_outfit(10, {'ids': [ids[0], *ids[3:]]})
