@@ -389,7 +389,7 @@ class App:
                 raise UserError('Вещь уже заменена. Открой последний вариант образа.')
             category = self.s.item(uid, old)['category']
             alternatives = [i for i in self.s.items(uid) if i['category'] == category and i['id'] not in outfit['ids']]
-            buttons = [(f"#{i['id']} · {i['description'][:45]}", f"pick:{oid}:{old}:{i['id']}") for i in alternatives[page*8:page*8+8]]
+            buttons = [(f"#{i['id']} · {i.get('item_type') or i['category']} · {i['description'][:32]}", f"pick:{oid}:{old}:{i['id']}") for i in alternatives[page*8:page*8+8]]
             if page:
                 buttons.append(('← Назад', f'swap:{oid}:{old}:{page-1}'))
             if len(alternatives) > page*8+8:
