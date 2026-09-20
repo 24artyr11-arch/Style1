@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from PIL import Image
-from core import Store, UserError, QUESTIONS, collage, normalize_photo, validate_outfits
+from core import Store, UserError, QUESTIONS, collage, normalize_photo, validate_outfits, _upper_layout, _bottom_layout
 from bot import App, AI
 from unittest.mock import patch
 import json
@@ -166,6 +166,19 @@ class Tests(unittest.TestCase):
         im = Image.open(io.BytesIO(collage([self.s.item(10, i) for i in ids])))
         self.assertEqual(im.size, (1080, 1536))
         self.assertEqual(Image.open(io.BytesIO(normalize_photo(photo()))).format, 'JPEG')
+
+    def test_two_upper_layers_split_evenly(self):
+        boxes = _upper_layout(2)
+        self.assertEqual(len(boxes), 2)
+        self.assertEqual(boxes[0][2:], boxes[1][2:])
+        self.assertLess(boxes[0][0], 540)
+        self.assertGreater(boxes[1][0], 540)
+
+    def test_short_bottom_is_not_scaled_like_long_trousers(self):
+        short_box, short_shoe_y = _bottom_layout({'item_type': 'Шорты', 'description': ''})
+        long_box, long_shoe_y = _bottom_layout({'item_type': 'Брюки', 'description': ''})
+        self.assertLess(short_box[3], long_box[3])
+        self.assertLess(short_shoe_y, long_shoe_y)
 
     def test_responses_payload_and_refusal(self):
         response = {'status': 'completed', 'output': [{'content': [{'type': 'output_text', 'text': json.dumps({'valid': True, 'category': 'Верх', 'item_type': 'Футболка', 'description': 'Верх'})}]}]}
