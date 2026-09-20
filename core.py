@@ -133,9 +133,9 @@ def normalize_photo(raw):
 def validate_outfits(result, inventory):
     outfits = result.get('outfits', [])
     if not outfits:
-        raise UserError(result.get('message', 'Недостаточно вещей для трёх образов.')[:800])
-    if len(outfits) != 3:
-        raise UserError('Не удалось составить три разных образа. Добавь вещей или измени параметры.')
+        raise UserError(result.get('message', 'Недостаточно вещей для подходящего образа.')[:800])
+    if not 1 <= len(outfits) <= 3:
+        raise UserError('ИИ вернул некорректное количество образов. Попробуй ещё раз.')
     known = {i['id']: i for i in inventory}
     seen = set()
     for outfit in outfits:
@@ -147,7 +147,7 @@ def validate_outfits(result, inventory):
             raise UserError('Для полного образа нужны обувь и верх с низом либо платье / комбинезон.')
         key = tuple(sorted(ids))
         if key in seen:
-            raise UserError('В гардеробе не получилось найти три разных комплекта. Добавь вещей.')
+            raise UserError('Образы должны отличаться набором вещей. Попробуй ещё раз.')
         seen.add(key)
     return outfits
 
