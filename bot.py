@@ -132,8 +132,8 @@ CONSENT = ('Бот сохраняет фотографии и описания �
            'Кнопка удаления очищает данные на сервере бота; сообщения в Telegram удаляются отдельно.')
 
 class App:
-    def __init__(self, store, tg, ai, allowed):
-        self.s, self.t, self.ai, self.allowed = store, tg, ai, allowed
+    def __init__(self, store, tg, ai):
+        self.s, self.t, self.ai = store, tg, ai
 
     def menu(self, uid):
         self.t.say(uid, 'Твой гардероб: добавляй вещи и собирай образы.', MENU)
@@ -150,9 +150,6 @@ class App:
                 self.t.call('answerCallbackQuery', {'callback_query_id': cb['id']})
             except UserError:
                 pass
-        if uid not in self.allowed:
-            self.t.say(uid, f'Бот работает для тестовой группы. Передай администратору свой ID: {uid}')
-            return
         action = cb.get('data', '') if cb else ''
         if action == 'consent':
             self.s.accept(uid)
@@ -175,7 +172,7 @@ class App:
             self.t.say(uid, 'Это фото уже есть в гардеробе.')
             return
         if len(self.s.items(uid)) >= 200:
-            raise UserError('В тестовой версии можно сохранить 200 вещей. Удали ненужные.')
+            raise UserError('Можно сохранить до 200 вещей. Удали ненужные.')
         raw = normalize_photo(self.t.download(photo['file_id']))
         self.t.say(uid, 'Распознаю вещь…')
         item = self.ai.classify(raw)
@@ -314,18 +311,17 @@ def main():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     token = os.environ.get('TELEGRAM_BOT_TOKEN', '')
     key = os.environ.get('OPENAI_API_KEY', '')
-    allowed = {int(x.strip()) for x in os.environ.get('ALLOWED_USER_IDS', '').split(',') if x.strip()}
-    if not token or not key or not allowed:
-        raise SystemExit('Заполни TELEGRAM_BOT_TOKEN, OPENAI_API_KEY и ALLOWED_USER_IDS.')
+    if not token or not key:
+        raise SystemExit('Заполни TELEGRAM_BOT_TOKEN и OPENAI_API_KEY.')
     directory = Path(os.environ.get('DATA_DIR', './data'))
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.umask(0o077)
     store = Store(directory / 'wardrobe.sqlite3')
     tg = Telegram(token)
-    app = App(store, tg, AI(key, os.environ.get('OPENAI_MODEL', 'gpt-5.1')), allowed)
+    app = App(store, tg, AI(key, os.environ.get('OPENAI_MODEL', 'gpt-5.1')))
     if tg.call('getWebhookInfo').get('url'):
         raise SystemExit('У бота активен webhook. Отключи предыдущую интеграцию перед запуском polling.')
-    LOG.info('Bot started; private allowlisted users only')
+    LOG.info('Bot started; private chats enabled for all users')
     while True:
         try:
             updates = tg.call('getUpdates', {'offset': store.offset(), 'timeout': 25, 'limit': 20,
