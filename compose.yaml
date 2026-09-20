@@ -19,3 +19,4 @@ services:
         max-file: "2"
 volumes:
   wardrobe_data:
+    name: ${WARDROBE_VOLUME_NAME:-style1_wardrobe_data}
