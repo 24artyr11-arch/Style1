@@ -14,12 +14,16 @@ def photo():
     return b.getvalue()
 
 class FakeTG:
-    def __init__(self): self.sent = []
+    def __init__(self):
+        self.sent = []
+        self.calls = []
     def say(self, uid, text, buttons=None): self.sent.append(('text', uid, text, buttons))
     def photo(self, uid, raw, caption, buttons=None):
         Image.open(io.BytesIO(raw)).verify()
         self.sent.append(('photo', uid, caption, buttons))
-    def call(self, *args, **kwargs): return True
+    def call(self, *args, **kwargs):
+        self.calls.append((args, kwargs))
+        return True
     def download(self, file_id): return photo()
 
 class FakeAI:
@@ -49,7 +53,7 @@ class Tests(unittest.TestCase):
         return [self.s.add(10, str(n), cat, cat, photo()) for n, cat in enumerate(['Верх']*3 + ['Низ', 'Обувь'])]
 
     def event(self, uid, data=None, pics=None):
-        msg = {'chat': {'id': uid, 'type': 'private'}, 'from': {'id': uid}, 'text': '/start'}
+        msg = {'message_id': 123, 'chat': {'id': uid, 'type': 'private'}, 'from': {'id': uid}, 'text': '/start'}
         if pics: msg['photo'] = pics
         return {'callback_query': {'id': 'x', 'from': {'id': uid}, 'message': msg, 'data': data}} if data else {'message': msg}
 
@@ -95,6 +99,22 @@ class Tests(unittest.TestCase):
         nonce = self.s.state(10)['nonce']
         self.app.callback(10, f'q:{nonce}:0:0')
         with self.assertRaises(UserError): self.app.callback(10, f'q:{nonce}:0:0')
+
+    def test_callback_deletes_previous_message(self):
+        self.app.handle(self.event(10, 'menu'))
+        self.assertTrue(any(args and args[0] == 'deleteMessage' and
+                            kwargs == {} and args[1] == {'chat_id': 10, 'message_id': 123}
+                            for args, kwargs in self.t.calls))
+
+    def test_wizard_back_returns_to_previous_question(self):
+        self.seed()
+        self.app.callback(10, 'looks')
+        nonce = self.s.state(10)['nonce']
+        self.app.callback(10, f'q:{nonce}:0:0')
+        self.assertEqual(self.s.state(10)['step'], 1)
+        self.app.callback(10, f'qback:{nonce}:1')
+        self.assertEqual(self.s.state(10)['step'], 0)
+        self.assertNotIn(QUESTIONS[0][0], self.s.state(10)['answers'])
 
     def test_one_or_two_outfits_are_accepted(self):
         ids = self.seed()
