@@ -7,6 +7,7 @@ from core import Store, UserError, QUESTIONS, collage, normalize_photo, validate
 from bot import App, AI
 from unittest.mock import patch
 import json
+import base64
 
 def photo():
     b = io.BytesIO()
@@ -30,7 +31,9 @@ class FakeAI:
     calls = 0
     def classify(self, raw):
         self.calls += 1
-        return {'valid': True, 'category': 'Верх', 'description': 'Зелёный верх'}
+        return {'valid': True, 'category': 'Верх', 'item_type': 'Футболка', 'description': 'Зелёный верх'}
+    def catalog_photo(self, raw, item):
+        return raw
     def outfits(self, items, answers):
         tops = [i['id'] for i in items if i['category'] == 'Верх']
         bottom = next(i['id'] for i in items if i['category'] == 'Низ')
@@ -161,11 +164,11 @@ class Tests(unittest.TestCase):
     def test_collage_and_normalization(self):
         ids = self.seed()
         im = Image.open(io.BytesIO(collage([self.s.item(10, i) for i in ids])))
-        self.assertEqual(im.size, (1000, 1648))
+        self.assertEqual(im.size, (1080, 1536))
         self.assertEqual(Image.open(io.BytesIO(normalize_photo(photo()))).format, 'JPEG')
 
     def test_responses_payload_and_refusal(self):
-        response = {'status': 'completed', 'output': [{'content': [{'type': 'output_text', 'text': json.dumps({'valid': True, 'category': 'Верх', 'description': 'Верх'})}]}]}
+        response = {'status': 'completed', 'output': [{'content': [{'type': 'output_text', 'text': json.dumps({'valid': True, 'category': 'Верх', 'item_type': 'Футболка', 'description': 'Верх'})}]}]}
         with patch('bot.request', return_value=json.dumps(response).encode()) as call:
             AI('fake', 'gpt-5.1').classify(photo())
             payload = json.loads(call.call_args.args[1])
@@ -174,5 +177,26 @@ class Tests(unittest.TestCase):
             self.assertTrue(payload['input'][0]['content'][1]['image_url'].startswith('data:image/jpeg;base64,'))
         with patch('bot.request', return_value=b'{"status":"completed","output":[]}'):
             with self.assertRaises(UserError): AI('fake', 'gpt-5.1').classify(photo())
+
+    def test_catalog_photo_uses_image_edit_api(self):
+        encoded = base64.b64encode(photo()).decode()
+        with patch('bot.multipart_request', return_value=json.dumps({'data': [{'b64_json': encoded}]}).encode()) as call:
+            result = AI('fake', 'gpt-5.1', 'gpt-image-2').catalog_photo(
+                photo(), {'item_type': 'Футболка', 'description': 'Белая футболка'}
+            )
+            Image.open(io.BytesIO(result)).verify()
+            args = call.call_args.args
+            self.assertEqual(args[0], 'https://api.openai.com/v1/images/edits')
+            self.assertEqual(args[1]['model'], 'gpt-image-2')
+            self.assertEqual(args[1]['background'], 'transparent')
+            self.assertEqual(args[2][0][0], 'image')
+
+    def test_item_type_and_display_photo_persist(self):
+        raw = photo()
+        iid = self.s.add(10, 'typed', 'Верх', 'Описание', raw,
+                         item_type='Кардиган', display_photo=raw)
+        item = self.s.item(10, iid)
+        self.assertEqual(item['item_type'], 'Кардиган')
+        self.assertEqual(item['display_photo'], raw)
 
 if __name__ == '__main__': unittest.main()
