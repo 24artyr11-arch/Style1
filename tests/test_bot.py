@@ -38,7 +38,7 @@ class Tests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.s = Store(Path(self.tmp.name) / 'db')
         self.t, self.ai = FakeTG(), FakeAI()
-        self.app = App(self.s, self.t, self.ai, {10, 20})
+        self.app = App(self.s, self.t, self.ai)
         self.s.accept(10)
 
     def tearDown(self):
@@ -73,15 +73,15 @@ class Tests(unittest.TestCase):
                           lambda: self.s.outfit(20, oid), lambda: self.s.replace(20, oid, ids[0], ids[1])]:
             with self.assertRaises(UserError): operation()
 
-    def test_photo_consent_and_allowlist(self):
+    def test_photo_consent_for_any_user(self):
         p = [{'file_id': 'x', 'file_unique_id': 'x'}]
         self.app.handle(self.event(99, pics=p))
-        self.app.handle(self.event(20, pics=p))
         self.assertEqual(self.ai.calls, 0)
         self.assertFalse(self.s.items(99))
-        self.app.handle(self.event(20, 'consent'))
-        self.app.handle(self.event(20, pics=p))
+        self.app.handle(self.event(99, 'consent'))
+        self.app.handle(self.event(99, pics=p))
         self.assertEqual(self.ai.calls, 1)
+        self.assertEqual(len(self.s.items(99)), 1)
 
     def test_album_photos_independent_and_duplicate_free(self):
         for n in ('a', 'b', 'a'):
