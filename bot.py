@@ -56,7 +56,13 @@ class Telegram:
             for k, value in data.items():
                 value = json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value)
                 body.extend(f'--{boundary}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{value}\r\n'.encode())
-            body.extend(f'--{boundary}\r\nContent-Disposition: form-data; name="photo"; filename="outfit.jpg"\r\nContent-Type: image/jpeg\r\n\r\n'.encode())
+            is_png = photo[:4] == bytes((137, 80, 78, 71))
+            filename = 'outfit.png' if is_png else 'outfit.jpg'
+            content_type = 'image/png' if is_png else 'image/jpeg'
+            body.extend(
+                f'--{boundary}\r\nContent-Disposition: form-data; name="photo"; filename="{filename}"\r\n'
+                f'Content-Type: {content_type}\r\n\r\n'.encode()
+            )
             body.extend(photo)
             body.extend(f'\r\n--{boundary}--\r\n'.encode())
             raw = request(self.root + method, bytes(body), {'Content-Type': f'multipart/form-data; boundary={boundary}'})
