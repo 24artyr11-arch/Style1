@@ -152,6 +152,13 @@ class App:
                 self.t.call('answerCallbackQuery', {'callback_query_id': cb['id']})
             except UserError:
                 pass
+            message_id = msg.get('message_id')
+            chat_id = msg.get('chat', {}).get('id')
+            if message_id and chat_id:
+                try:
+                    self.t.call('deleteMessage', {'chat_id': chat_id, 'message_id': message_id})
+                except UserError:
+                    pass
         action = cb.get('data', '') if cb else ''
         if action == 'consent':
             self.s.accept(uid)
@@ -184,7 +191,8 @@ class App:
     def show_item(self, uid, iid):
         item = self.s.item(uid, iid)
         self.t.photo(uid, item['photo'], f"#{iid} · {item['category']}\n{item['description']}",
-                     [('Исправить категорию', f'cat:{iid}'), ('Удалить вещь', f'del:{iid}'), ('Меню', 'menu')])
+                     [('Исправить категорию', f'cat:{iid}'), ('Удалить вещь', f'del:{iid}'),
+                      ('← Назад', 'list:0'), ('Меню', 'menu')])
 
     def listing(self, uid, page):
         items = self.s.items(uid)
@@ -199,7 +207,9 @@ class App:
 
     def question(self, uid, state):
         key, prompt, options = QUESTIONS[state['step']]
-        self.t.say(uid, prompt, [(text, f"q:{state['nonce']}:{state['step']}:{i}") for i, text in enumerate(options)] + [('Отмена', 'cancel')])
+        back = ('← Назад', f"qback:{state['nonce']}:{state['step']}") if state['step'] else ('← Назад', 'cancel')
+        self.t.say(uid, prompt,
+                   [(text, f"q:{state['nonce']}:{state['step']}:{i}") for i, text in enumerate(options)] + [back, ('Отмена', 'cancel')])
 
     def show_outfit(self, uid, oid):
         data = self.s.outfit(uid, oid)
@@ -207,7 +217,8 @@ class App:
         prefs = ' · '.join(data.get('preferences', {}).values())
         caption = f"{data['title']}\n{data['reason']}\n\n{prefs}"
         self.t.photo(uid, collage(items), caption,
-                     [(f"Заменить #{i['id']} · {i['category']}", f"swap:{oid}:{i['id']}:0") for i in items] + [('Меню', 'menu')])
+                     [(f"Заменить #{i['id']} · {i['category']}", f"swap:{oid}:{i['id']}:0") for i in items] +
+                     [('← Назад', 'recent'), ('Меню', 'menu')])
 
     def callback(self, uid, action):
         parts = action.split(':')
@@ -219,7 +230,8 @@ class App:
             self.menu(uid)
         elif cmd == 'upload':
             self.t.say(uid, 'Отправь одно или несколько фото одним альбомом. На каждом — одна вещь. '
-                       'Фотографии обработаю по очереди. Когда все появятся в гардеробе, нажми «Подобрать образы».', MENU)
+                       'Фотографии обработаю по очереди. Когда все появятся в гардеробе, нажми «Подобрать образы».',
+                       [('← Назад', 'menu')])
         elif cmd == 'list':
             self.listing(uid, int(parts[1]))
         elif cmd == 'item':
@@ -227,7 +239,8 @@ class App:
         elif cmd == 'cat':
             iid = int(parts[1])
             self.s.item(uid, iid)
-            self.t.say(uid, 'Выбери категорию:', [(c, f'setcat:{iid}:{n}') for n, c in enumerate(CATEGORIES)])
+            self.t.say(uid, 'Выбери категорию:',
+                       [(c, f'setcat:{iid}:{n}') for n, c in enumerate(CATEGORIES)] + [('← Назад', f'item:{iid}')])
         elif cmd == 'setcat':
             self.s.change_category(uid, int(parts[1]), CATEGORIES[int(parts[2])])
             self.show_item(uid, int(parts[1]))
@@ -235,15 +248,15 @@ class App:
             iid = int(parts[1])
             self.s.item(uid, iid)
             self.t.say(uid, f'Удалить вещь #{iid}? Старые образы будут сброшены.',
-                       [('Да, удалить', f'delete:{iid}'), ('Отмена', 'menu')])
+                       [('Да, удалить', f'delete:{iid}'), ('← Назад', f'item:{iid}')])
         elif cmd == 'delete':
             self.s.delete(uid, int(parts[1]))
-            self.t.say(uid, 'Вещь удалена.', MENU)
+            self.t.say(uid, 'Вещь удалена.', [('← Назад', 'list:0'), ('Меню', 'menu')])
         elif cmd == 'erase':
             state = {'erase': secrets.token_hex(4)}
             self.s.state(uid, state)
             self.t.say(uid, 'Удалить все фото, описания, параметры и образы с сервера бота? Отменить удаление нельзя.',
-                       [('Удалить всё', 'eraseyes:' + state['erase']), ('Отмена', 'cancel')])
+                       [('Удалить всё', 'eraseyes:' + state['erase']), ('← Назад', 'cancel')])
         elif cmd == 'eraseyes':
             if self.s.state(uid).get('erase') != parts[1]:
                 raise UserError('Подтверждение устарело. Открой меню.')
@@ -256,6 +269,17 @@ class App:
                     ('Платье / комбинезон' in categories or {'Верх', 'Низ'} <= categories)):
                 raise UserError('Для подбора нужен хотя бы один полный образ: обувь и верх с низом либо платье / комбинезон.')
             state = self.s.state(uid, {'step': 0, 'answers': {}, 'nonce': secrets.token_hex(4)})
+            self.question(uid, state)
+        elif cmd == 'qback':
+            state = self.s.state(uid)
+            step = int(parts[2])
+            if state.get('nonce') != parts[1] or state.get('step') != step or step <= 0:
+                raise UserError('Эта кнопка устарела. Начни подбор заново.')
+            previous = step - 1
+            key = QUESTIONS[previous][0]
+            state['answers'].pop(key, None)
+            state['step'] = previous
+            self.s.state(uid, state)
             self.question(uid, state)
         elif cmd == 'q':
             state = self.s.state(uid)
