@@ -54,7 +54,7 @@ def require_persistent_storage(directory):
         raise SystemExit(
             f'DATA_DIR={directory} не подключён как отдельный volume. '
             'Запуск остановлен, чтобы после следующего деплоя не потерять гардеробы. '
-            'Подключите постоянный диск к /data или установите корректный DATA_DIR.'
+            'Подключите постоянный диск к DATA_DIR; на Bothost используйте /app/data.'
         )
 
 

@@ -3,8 +3,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends fonts-dejavu-co
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-RUN useradd --uid 10001 --create-home wardrobe && mkdir /data && chown wardrobe:wardrobe /data
+RUN useradd --uid 10001 --create-home wardrobe && mkdir -p /app/data && chown wardrobe:wardrobe /app/data
 COPY core.py bot.py ./
 USER wardrobe
-ENV PYTHONUNBUFFERED=1 DATA_DIR=/data REQUIRE_PERSISTENT_DATA=1
+ENV PYTHONUNBUFFERED=1 DATA_DIR=/app/data REQUIRE_PERSISTENT_DATA=1
 CMD ["python", "bot.py"]

@@ -4,7 +4,7 @@ services:
     restart: unless-stopped
     env_file: .env
     volumes:
-      - wardrobe_data:/data
+      - wardrobe_data:/app/data
     read_only: true
     tmpfs:
       - /tmp

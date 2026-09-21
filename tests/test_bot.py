@@ -511,6 +511,13 @@ class PersistenceTests(unittest.TestCase):
         self.assertTrue(has_dedicated_mount(Path('/data'), self.mountinfo))
         self.assertTrue(has_dedicated_mount(Path('/data/nested'), self.mountinfo))
 
+    def test_bothost_data_directory_under_app_mount_is_detected(self):
+        mountinfo = '''
+21 1 0:1 / / rw,relatime - overlay overlay rw
+22 21 0:2 / /app rw,relatime - ext4 /dev/vdb rw
+'''
+        self.assertTrue(has_dedicated_mount(Path('/app/data'), mountinfo))
+
     def test_container_root_is_not_treated_as_persistent(self):
         root_only = '21 1 0:1 / / rw,relatime - overlay overlay rw\n'
         self.assertFalse(has_dedicated_mount(Path('/data'), root_only))
