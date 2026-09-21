@@ -6,5 +6,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN useradd --uid 10001 --create-home wardrobe && mkdir /data && chown wardrobe:wardrobe /data
 COPY core.py bot.py ./
 USER wardrobe
-ENV PYTHONUNBUFFERED=1 DATA_DIR=/data
+ENV PYTHONUNBUFFERED=1 DATA_DIR=/data REQUIRE_PERSISTENT_DATA=1
 CMD ["python", "bot.py"]

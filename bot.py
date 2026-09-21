@@ -18,6 +18,46 @@ from core import CATEGORIES, QUESTIONS, Store, UserError, normalize_photo, valid
 LOG = logging.getLogger('wardrobe')
 
 
+def _mount_path(value):
+    """Decode the escaping used for mount points in /proc/self/mountinfo."""
+    return value.replace('\\040', ' ').replace('\\011', '\t').replace('\\012', '\n').replace('\\134', '\\')
+
+
+def has_dedicated_mount(directory, mountinfo=None):
+    """Return whether directory is located on a mount other than the container root."""
+    target = directory.resolve()
+    if mountinfo is None:
+        try:
+            mountinfo = Path('/proc/self/mountinfo').read_text(encoding='utf-8')
+        except OSError:
+            return False
+    for line in mountinfo.splitlines():
+        fields = line.split()
+        if len(fields) < 5:
+            continue
+        mount = Path(_mount_path(fields[4]))
+        if mount == Path('/'):
+            continue
+        if target == mount or mount in target.parents:
+            return True
+    return False
+
+
+def require_persistent_storage(directory):
+    """Refuse to create a disposable production database by accident."""
+    required = os.environ.get('REQUIRE_PERSISTENT_DATA', '0').strip().lower()
+    if required not in {'1', 'true', 'yes', 'on'}:
+        return
+    if not directory.is_absolute():
+        raise SystemExit('DATA_DIR должен быть абсолютным путём к постоянному диску.')
+    if not has_dedicated_mount(directory):
+        raise SystemExit(
+            f'DATA_DIR={directory} не подключён как отдельный volume. '
+            'Запуск остановлен, чтобы после следующего деплоя не потерять гардеробы. '
+            'Подключите постоянный диск к /data или установите корректный DATA_DIR.'
+        )
+
+
 def request(url, data=None, headers=None, timeout=90):
     req = urllib.request.Request(url, data=data, headers=headers or {})
     try:
@@ -741,8 +781,12 @@ def main():
         raise SystemExit('Заполни TELEGRAM_BOT_TOKEN и OPENAI_API_KEY.')
     directory = Path(os.environ.get('DATA_DIR', './data'))
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    require_persistent_storage(directory)
     os.umask(0o077)
-    store = Store(directory / 'wardrobe.sqlite3')
+    database = directory / 'wardrobe.sqlite3'
+    existed = database.exists()
+    store = Store(database)
+    LOG.info('Wardrobe database opened; path=%s existing=%s', database, existed)
     telegram = Telegram(token)
     app = App(
         store,

@@ -11,7 +11,15 @@ from unittest.mock import patch
 
 from PIL import Image
 
-from bot import AI, App, OUTFIT_IMAGE_PROMPT, TRY_ON_PROMPT, UpdateDispatcher
+from bot import (
+    AI,
+    App,
+    OUTFIT_IMAGE_PROMPT,
+    TRY_ON_PROMPT,
+    UpdateDispatcher,
+    has_dedicated_mount,
+    require_persistent_storage,
+)
 from core import QUESTIONS, Store, UserError, normalize_photo, validate_outfits
 
 
@@ -491,6 +499,29 @@ class DispatcherTests(unittest.TestCase):
         dispatcher.shutdown()
         self.assertEqual(app.maximum, 1)
         self.assertEqual(app.order, list(range(4)))
+
+
+class PersistenceTests(unittest.TestCase):
+    mountinfo = '''
+21 1 0:1 / / rw,relatime - overlay overlay rw
+22 21 0:2 / /data rw,relatime - ext4 /dev/vdb rw
+'''
+
+    def test_data_volume_is_detected(self):
+        self.assertTrue(has_dedicated_mount(Path('/data'), self.mountinfo))
+        self.assertTrue(has_dedicated_mount(Path('/data/nested'), self.mountinfo))
+
+    def test_container_root_is_not_treated_as_persistent(self):
+        root_only = '21 1 0:1 / / rw,relatime - overlay overlay rw\n'
+        self.assertFalse(has_dedicated_mount(Path('/data'), root_only))
+
+    def test_production_mode_rejects_missing_volume(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.dict('os.environ', {'REQUIRE_PERSISTENT_DATA': '1'}, clear=False):
+                with patch('bot.has_dedicated_mount', return_value=False):
+                    with self.assertRaises(SystemExit) as caught:
+                        require_persistent_storage(Path(directory))
+        self.assertIn('не подключён как отдельный volume', str(caught.exception))
 
 
 if __name__ == '__main__':
